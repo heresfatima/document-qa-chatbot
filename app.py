@@ -7,6 +7,7 @@ from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 import os
 import tempfile
+import uuid
 
 load_dotenv()
 
@@ -29,12 +30,31 @@ if uploaded_file is not None:
             chunks = splitter.split_documents(pages)
 
             embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-            vectorstore = Chroma.from_documents(documents=chunks, embedding=embeddings)
+            if "processed_file" not in st.session_state or st.session_state.processed_file != uploaded_file.name:
+                with st.spinner("Processing..."):
+                    loader = PyMuPDFLoader(tmp_path)
+                    pages = loader.load()
+
+                splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
+                chunks = splitter.split_documents(pages)
+
+                embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+                # Har upload k lie naya, unique collection name
+                collection_name = f"doc_{uuid.uuid4().hex[:8]}"
+                vectorstore = Chroma.from_documents(
+                    documents=chunks,
+                    embedding=embeddings,
+                    collection_name=collection_name
+                )
+
+                st.session_state.vectorstore = vectorstore
+                st.session_state.processed_file = uploaded_file.name
 
             st.session_state.vectorstore = vectorstore
             st.session_state.processed_file = uploaded_file.name
 
-        st.success(f"✅ PDF is ready! {len(chunks)} chunks made.")
+        st.success(f"✅ PDF is ready!")
 
     question = st.text_input("Ask anything from pdf:")
 
@@ -48,9 +68,17 @@ if uploaded_file is not None:
             context = "\n\n".join([chunk.page_content for chunk in relevant_chunks])
 
             if answer_length == "Short":
-                length_instruction = "Jawab CHOTA aur summarized dein (2-4 sentences), lekin koi zaroori point miss na ho — sirf concise tareeqe se likhein."
+                length_instruction = """Jawab CHOTA rakhein (2-4 sentences ka mazmoon), lekin isay ASAN aur QUICKLY SCANNABLE banayein:
+            - Zaroori keywords ya terms ko **bold** karein (double asterisks k sath)
+            - Agar jawab mn multiple points/items hon (jese types, examples, steps), to unhein bullet list ki tarah likhein, har point new line pr "- " se shuru kr k
+            - Har bullet chota aur to-the-point ho, lambi sentence na ho
+            - Total content chota hi rahe — sirf presentation clear honi chahiye
+            - Agar sawal mn do ya zyada cheezon ka COMPARISON ya DIFFERENCE poocha gaya ho, to jawab ek Markdown TABLE ki soorat mn dein (| Column | Column | wali formatting), taake dono cheezein side-by-side saaf nazar aayen"""
             else:
-                length_instruction = "Jawab DETAILED dein — poori tarha explain karein, examples aur context k sath, taake reader ko gehri samajh aa jaye."
+                length_instruction = """Jawab DETAILED dein 
+                — poori tarha explain karein, examples aur context k sath, taake reader ko gehri samajh aa jaye." \
+                - Zaroori keywords ya terms ko **bold** karein (double asterisks k sath)
+                - Agar sawal mn COMPARISON ya DIFFERENCE poocha gaya ho, or agr document mn koi sawal already Markdown TABLE mn ho to usko bhi jawab mn show krte hue Markdown TABLE use karein (| Column | Column | format mn) taake points clearly side-by-side dikhein"""
 
             prompt = f"""Neeche diye gaye context ka istemal kr k sawal ka jawab dein.
 
@@ -60,7 +88,7 @@ Zaroori Instructions:
 - Lekin: har fact ko sirf uske ASAL topic k sath hi use karein. Kisi aik cheez ko doosri cheez ka example mat banayein sirf is liye k wo pass mn likhi thi
 - Agar context clearly kehta hai koi cheez "theoretical hai" ya "exist nahi karti", to yehi honestly bata dein
 - {length_instruction}
-- Jawab PLAIN TEXT mn likhein — koi HTML tags ya Markdown symbols use na karein
+- Sirf **bold** aur "- " bullet points allowed hain (jese upar length instruction mn bataya gaya) — koi HTML tags (jese <br>, <ul>) bilkul use na karein
 - Agar sawal k kisi hisse ka jawab context mn nahi milta, saaf bata dein
 - Jawab hamesha ENGLISH mn dein
 
