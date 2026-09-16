@@ -19,7 +19,7 @@ def load_pdf(filepath):
         return None
 
 # Use karein
-pages = load_pdf("ai_info.pdf")
+pages = load_pdf("computer_science.pdf")
 if pages:
     print(f"✅ {len(pages)} pages successfully load hue")
     

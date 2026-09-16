@@ -4,7 +4,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
 # Step 1: PDF load karein
-loader = PyMuPDFLoader("ai_info.pdf")
+loader = PyMuPDFLoader("computer_science.pdf")
 pages = loader.load()
 print(f"✅ {len(pages)} pages load hue")
 
