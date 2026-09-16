@@ -13,16 +13,13 @@ load_dotenv()
 st.title("📄 Document Q&A Chatbot")
 st.write("Upload your PDF and ask relevant questions!")
 
-# File upload karne ka box
 uploaded_file = st.file_uploader("Upload PDF", type="pdf")
 
 if uploaded_file is not None:
-    # Uploaded file ko temporarily save karein taake loader use kr sake
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
         tmp_file.write(uploaded_file.read())
         tmp_path = tmp_file.name
 
-    # Sirf ek dafa process karein (baar baar nahi, jab tak file change na ho)
     if "processed_file" not in st.session_state or st.session_state.processed_file != uploaded_file.name:
         with st.spinner("Processing..."):
             loader = PyMuPDFLoader(tmp_path)
@@ -39,8 +36,9 @@ if uploaded_file is not None:
 
         st.success(f"✅ PDF is ready! {len(chunks)} chunks made.")
 
-    # Sawal poochne ka box
     question = st.text_input("Ask anything from pdf:")
+
+    answer_length = st.radio("Answer style:", ["Short", "Long"], horizontal=True)
 
     if question:
         with st.spinner("Searching answer..."):
@@ -49,15 +47,21 @@ if uploaded_file is not None:
             relevant_chunks = st.session_state.vectorstore.similarity_search(question, k=10)
             context = "\n\n".join([chunk.page_content for chunk in relevant_chunks])
 
+            if answer_length == "Short":
+                length_instruction = "Jawab CHOTA aur summarized dein (2-4 sentences), lekin koi zaroori point miss na ho — sirf concise tareeqe se likhein."
+            else:
+                length_instruction = "Jawab DETAILED dein — poori tarha explain karein, examples aur context k sath, taake reader ko gehri samajh aa jaye."
+
             prompt = f"""Neeche diye gaye context ka istemal kr k sawal ka jawab dein.
 
 Zaroori Instructions:
 - Jawab SIRF isi context se aana chahiye, bahar ki knowledge use na karein
 - Agar sawal ka jawab dene k liye multiple sections/topics ki info combine karni pare, to bilkul combine karein — ye acha hai jab genuinely related ho
-- Lekin: har fact ko sirf uske ASAL topic k sath hi use karein. Kisi aik cheez (jaise Narrow AI k examples) ko doosri cheez (jaise General AI) ka example mat banayein, sirf is liye k wo pass mn likhi thi
-- Agar context clearly kehta hai koi cheez "theoretical hai", "exist nahi karti", ya "abhi nahi di gayi", to yehi cheez honestly bata dein us specific part k liye — khud se examples mat banayein sirf jawab complete dikhane k liye
-- Jawab ko apne alfaz mn clearly explain karein, information ko samjha k complete aur meaningful tareeqe se present karein
-- Agar sawal k kisi hisse ka jawab context mn nahi milta, saaf bata dein k wo specific info document mn nahi di gayi — baqi sawal ka jawab phir bhi dein
+- Lekin: har fact ko sirf uske ASAL topic k sath hi use karein. Kisi aik cheez ko doosri cheez ka example mat banayein sirf is liye k wo pass mn likhi thi
+- Agar context clearly kehta hai koi cheez "theoretical hai" ya "exist nahi karti", to yehi honestly bata dein
+- {length_instruction}
+- Jawab PLAIN TEXT mn likhein — koi HTML tags ya Markdown symbols use na karein
+- Agar sawal k kisi hisse ka jawab context mn nahi milta, saaf bata dein
 - Jawab hamesha ENGLISH mn dein
 
 Context:
@@ -65,7 +69,7 @@ Context:
 
 Question: {question}
 
-Answer (complete accurate):"""
+Answer:"""
 
             response = llm.invoke(prompt)
 
